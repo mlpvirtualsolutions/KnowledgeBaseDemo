@@ -3,8 +3,13 @@ import time
 import requests
 import streamlit as st
 import streamlit.components.v1 as components
+from PIL import Image
 
-st.set_page_config(layout="centered")
+st.set_page_config(
+    page_title="Meridian Ops Assistant",
+    page_icon=Image.open("images/favicon.png"),
+    layout="centered",
+)
 
 with open("images/logo.png", "rb") as f:
     img_b64 = base64.b64encode(f.read()).decode()
