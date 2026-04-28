@@ -7,6 +7,11 @@ html, body, [class*="css"] {
     background-color: #f9f9f9 !important;
 }
 
+/* Prevent browser from auto-scrolling when content updates inside a placeholder */
+*, *::before, *::after {
+    overflow-anchor: none !important;
+}
+
 /* narrower centered content */
 .block-container {
     max-width: 720px !important;
@@ -16,10 +21,10 @@ html, body, [class*="css"] {
 }
 
 .logo-img {
-    width: 56px;
-    height: 56px;
+    width: 80px;
+    height: 80px;
     object-fit: contain;
-    border-radius: 12px;
+    border-radius: 14px;
     display: block;
     margin: 0 auto 12px auto;
     background: #fff;
@@ -64,50 +69,37 @@ div[data-testid="stHorizontalBlock"] div[data-testid="stButton"] button:hover {
     color: #111827 !important;
 }
 
-/* chat message text */
-[data-testid="stChatMessageContent"],
-[data-testid="stChatMessageContent"] p,
-[data-testid="stChatMessageContent"] li,
-[data-testid="stChatMessageContent"] span {
-    font-family: 'Inter', sans-serif !important;
+/* spacing between user bubble and assistant response */
+.msg-spacer {
+    height: 16px;
+}
+
+/* user bubble — right-aligned grey pill */
+.user-bubble {
+    background: #ffffff;
+    border-radius: 18px;
+    padding: 10px 16px;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    color: #111;
+    display: inline-block;
+    float: right;
+    clear: both;
+    max-width: 100%;
+}
+
+/* assistant avatar */
+.assistant-avatar {
+    width: 32px !important;
+    height: 32px !important;
+    border-radius: 8px;
+    object-fit: cover;
+    margin-top: 2px;
+}
+
+/* assistant response text */
+[data-testid="stMarkdown"] p,
+[data-testid="stMarkdown"] li {
     font-size: 0.9rem !important;
     line-height: 1.6 !important;
-    font-weight: 400 !important;
-    color: inherit !important;
-}
-
-/* avatars */
-[data-testid="stChatMessageAvatarUser"],
-[data-testid="stChatMessageAvatarAssistant"] {
-    width: 32px !important;
-    height: 32px !important;
-    min-width: 32px !important;
-    overflow: hidden !important;
-    border-radius: 8px !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-}
-
-[data-testid="stChatMessageAvatarUser"] svg {
-    width: 32px !important;
-    height: 32px !important;
-}
-
-[data-testid="stChatMessageAvatarAssistant"] div,
-[data-testid="stChatMessageAvatarAssistant"] span,
-[data-testid="stChatMessageAvatarAssistant"] figure {
-    width: 32px !important;
-    height: 32px !important;
-    overflow: hidden !important;
-    margin: 0 !important;
-    padding: 0 !important;
-}
-
-[data-testid="stChatMessageAvatarAssistant"] img {
-    width: 32px !important;
-    height: 32px !important;
-    object-fit: cover !important;
-    border-radius: 8px !important;
-    display: block !important;
 }
