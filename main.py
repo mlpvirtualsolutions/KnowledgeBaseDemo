@@ -1,4 +1,3 @@
-import base64
 import time
 import requests
 import streamlit as st
@@ -11,9 +10,6 @@ st.set_page_config(
     layout="centered",
 )
 
-with open("images/logo.png", "rb") as f:
-    img_b64 = base64.b64encode(f.read()).decode()
-
 with open("style.css") as f:
     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
@@ -23,13 +19,11 @@ components.html("""<script>
     if(!w || w._scrollKilled) return;
     w._scrollKilled = true;
 
-    // 1. Kill all JS scroll functions
     w.scrollTo = w.scroll = w.scrollBy = function(){};
     w.Element.prototype.scrollIntoView = function(){};
     w.Element.prototype.scrollTo       = function(){};
     w.Element.prototype.scrollBy       = function(){};
 
-    // 2. Kill the scrollTop setter so direct property writes are ignored
     ['HTMLElement', 'Element'].forEach(function(name){
         var proto = w[name] && w[name].prototype;
         if(!proto) return;
@@ -38,8 +32,6 @@ components.html("""<script>
             {get: d.get, set: function(){}, configurable: true});
     });
 
-    // 3. Force overflow-anchor:none on every element so the browser's own
-    //    scroll-anchoring algorithm never adjusts the viewport position
     function noAnchor(root){
         root.querySelectorAll('*').forEach(function(el){
             el.style.overflowAnchor = 'none';
@@ -56,6 +48,26 @@ components.html("""<script>
             });
         });
     }).observe(w.document.body, {childList:true, subtree:true});
+
+    function setupTextarea(ta){
+        if(ta._autoResize) return;
+        ta._autoResize = true;
+        ta.style.overflowY = 'hidden';
+        ta.style.resize    = 'none';
+        function resize(){
+            ta.style.height = 'auto';
+            ta.style.height = ta.scrollHeight + 'px';
+        }
+        ta.addEventListener('input', resize);
+        resize();
+    }
+    function findTextareas(){
+        w.document.querySelectorAll('[data-testid="stChatInputTextArea"]')
+                  .forEach(setupTextarea);
+    }
+    findTextareas();
+    new w.MutationObserver(findTextareas)
+        .observe(w.document.body, {childList:true, subtree:true});
 })();
 </script>""", height=0)
 
@@ -66,16 +78,29 @@ if "messages" not in st.session_state:
 
 pending = st.session_state.pop("pending_prompt", None)
 show_header = len(st.session_state.messages) == 0 and pending is None
+
+# Navbar always rendered — position:fixed keeps it visible regardless of DOM position
+st.markdown("""
+<div class="app-navbar">
+  <div class="nav-brand">LOGI<span class="nav-brand-accent">DEX</span></div>
+  <div class="nav-links">
+    <span class="nav-link active">Chat</span>
+    <span class="nav-link">Dashboard</span>
+    <span class="nav-link">Handbook</span>
+    <span class="nav-link">Team</span>
+  </div>
+  <span class="nav-company">Meridian Freight</span>
+</div>
+""", unsafe_allow_html=True)
+
 header_placeholder = st.empty()
 
 if show_header:
     with header_placeholder.container():
-        st.markdown(f"""
-<div style="text-align:center; padding-top:8px;">
-  <img class="logo-img" src="data:image/png;base64,{img_b64}">
-</div>
-<h1 class="centered-header">Meridian Ops Assistant</h1>
-<p class="centered-sub">Your internal guide for the Meridian Brokerage Operations team. Ask anything about load execution, McLeod TMS, carrier sourcing, vetting, tracking, invoicing, and escalations — and get step-by-step answers pulled directly from the Operations Team Knowledge Base.</p>
+        st.markdown("""
+<div class="hero-label">Meridian Ops Assistant</div>
+<h1 class="hero-heading">What do you need to <span class="hero-accent">know?</span></h1>
+<p class="hero-subtitle">Step-by-step answers pulled directly from your operations handbook.</p>
 """, unsafe_allow_html=True)
 
         suggestions = [
@@ -83,16 +108,16 @@ if show_header:
             "How do I source and vet a carrier?",
             "What do I do if a load is late or missing?",
         ]
-        cols = st.columns(3)
-        for i, (col, sug) in enumerate(zip(cols, suggestions)):
-            with col:
-                if st.button(sug, key=f"sug_{i}", use_container_width=True):
-                    st.session_state.pending_prompt = sug
-                    st.rerun()
+        for i, sug in enumerate(suggestions):
+            if st.button(sug, key=f"sug_{i}", use_container_width=True):
+                st.session_state.pending_prompt = sug
+                st.rerun()
 
-        st.markdown("<div style='margin-bottom:20px'></div>", unsafe_allow_html=True)
+        st.markdown("""
+<p class="app-footer">Powered by <span class="app-footer-accent">Logidex</span></p>
+""", unsafe_allow_html=True)
 
-AVATAR_HTML = f'<img src="data:image/png;base64,{img_b64}" class="assistant-avatar">'
+ASSISTANT_LABEL = '<div class="assistant-label"><span class="assistant-dot">●</span> LOGIDEX</div>'
 
 
 def render_user(text):
@@ -102,53 +127,40 @@ def render_user(text):
 
 
 def render_assistant(text):
-    """Instant render for history replay."""
     st.markdown('<div class="msg-spacer"></div>', unsafe_allow_html=True)
-    left, right = st.columns([0.06, 0.94])
-    with left:
-        st.markdown(AVATAR_HTML, unsafe_allow_html=True)
-    with right:
-        st.markdown(text)
+    st.markdown(ASSISTANT_LABEL, unsafe_allow_html=True)
+    st.markdown(text)
 
 
 def fetch_and_stream(prompt):
-    """
-    Single column layout:
-      1. placeholder (empty) + spinner while fetching
-      2. stream response into placeholder — no new elements added so scroll stays put
-    """
     st.markdown('<div class="msg-spacer"></div>', unsafe_allow_html=True)
-    left, right = st.columns([0.06, 0.94])
-    with left:
-        st.markdown(AVATAR_HTML, unsafe_allow_html=True)
-    with right:
-        # placeholder sits above the spinner; both are in the right column
-        placeholder = st.empty()
-        with st.spinner("Thinking..."):
-            try:
-                resp = requests.get(
-                    N8N_WEBHOOK_URL,
-                    params={"message": prompt},
-                    auth=(st.secrets["auth"]["username"], st.secrets["auth"]["password"]),
-                    timeout=30,
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                if isinstance(data, list) and data:
-                    response = data[0].get("output") or data[0].get("message") or str(data[0])
-                elif isinstance(data, dict):
-                    response = data.get("output") or data.get("message") or data.get("text") or str(data)
-                else:
-                    response = str(data)
-            except Exception as e:
-                response = f"Error contacting n8n webhook: {e}"
+    st.markdown(ASSISTANT_LABEL, unsafe_allow_html=True)
+    placeholder = st.empty()
+    with st.spinner("Thinking..."):
+        try:
+            resp = requests.get(
+                N8N_WEBHOOK_URL,
+                params={"message": prompt},
+                auth=(st.secrets["auth"]["username"], st.secrets["auth"]["password"]),
+                timeout=30,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            if isinstance(data, list) and data:
+                response = data[0].get("output") or data[0].get("message") or str(data[0])
+            elif isinstance(data, dict):
+                response = data.get("output") or data.get("message") or data.get("text") or str(data)
+            else:
+                response = str(data)
+        except Exception as e:
+            response = f"Error contacting n8n webhook: {e}"
 
-        displayed = ""
-        for i in range(0, len(response), 10):
-            displayed += response[i:i + 10]
-            placeholder.markdown(displayed)
-            time.sleep(0.015)
-        placeholder.markdown(response)
+    displayed = ""
+    for i in range(0, len(response), 10):
+        displayed += response[i:i + 10]
+        placeholder.markdown(displayed)
+        time.sleep(0.015)
+    placeholder.markdown(response)
 
     return response
 
@@ -159,7 +171,7 @@ for message in st.session_state.messages:
     else:
         render_assistant(message["content"])
 
-chat_in = st.chat_input("Ask anything")
+chat_in = st.chat_input("Ask anything about your operations...")
 prompt = pending or chat_in
 
 if prompt:
