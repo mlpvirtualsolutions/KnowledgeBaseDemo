@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git push *)",
+      "Bash(git filter-repo *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git filter-branch *)",
+      "Bash(python -c ' *)",
+      "Bash(git pull *)",
+      "PowerShell(& \"c:\\\\Users\\\\Morgan\\\\OneDrive\\\\Desktop\\\\KnowledgeBaseProject\\\\FreightBrokerageDemo\\\\GPT-DEMO\\\\.venv\\\\Scripts\\\\pip.exe\" install supabase)"
+    ]
+  }
+}

@@ -1,185 +1,198 @@
-import time
-import requests
-import streamlit as st
-import streamlit.components.v1 as components
-from PIL import Image
+# =============================================================================
+# main.py — Meridian Ops Assistant
+# =============================================================================
+# Streamlit re-runs this entire file from top to bottom every time the user
+# interacts with the page (clicks a button, submits a message, etc.).
+#
+# Sections are arranged in the order they appear on screen:
+#
+#   1.  Config & Styles   — page setup, CSS, Supabase client
+#   2.  Logout            — clears session when "Sign out" is clicked
+#   3.  Login Gate        — shows the login form if the user isn't signed in
+#   ──  authenticated from here down  ──────────────────────────────────────
+#   4.  Scroll Scripts    — invisible JS fixes for scroll behavior
+#   5.  State Setup       — chat history, webhook URL, pending prompts
+#   6.  Navbar            — fixed top bar with user email + sign-out link
+#   7.  Hero              — welcome heading shown before the first message
+#   8.  Chat History      — all previous messages rendered in order
+#   9.  Chat Input        — text box pinned to the bottom of the screen
+#   10. Response Flow     — handles a new message end-to-end
+# =============================================================================
 
+import os
+from dotenv import load_dotenv
+load_dotenv(override=True)  # loads variables from the .env file into os.environ
+
+import streamlit as st
+from PIL import Image
+from supabase import create_client
+
+# All HTML, JavaScript, and visual rendering functions live in ui_components.py.
+# Keeping them there makes this file easy to read at a glance.
+from ui_components import (
+    inject_scroll_scripts,
+    render_login_page,
+    render_navbar,
+    render_hero_section,
+    render_user_message,
+    render_assistant_message,
+    scroll_to_last_bubble,
+    fetch_and_stream,
+)
+
+
+# =============================================================================
+# 1. CONFIG & STYLES
+# =============================================================================
+
+# Sets the browser tab title, favicon, and page width
 st.set_page_config(
     page_title="Meridian Ops Assistant",
     page_icon=Image.open("images/favicon.png"),
     layout="centered",
 )
 
+# Loads style.css — controls fonts, colors, the navbar, chat bubbles, etc.
 with open("style.css") as f:
     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-components.html("""<script>
-(function(){
-    var w = window.parent;
-    if(!w || w._scrollKilled) return;
-    w._scrollKilled = true;
+# Creates the Supabase database connection.
+# @st.cache_resource means it's only created once, not on every page rerun.
+@st.cache_resource
+def get_supabase():
+    return create_client(
+        st.secrets["supabase"]["url"],
+        st.secrets["supabase"]["key"],
+    )
 
-    w.scrollTo = w.scroll = w.scrollBy = function(){};
-    w.Element.prototype.scrollIntoView = function(){};
-    w.Element.prototype.scrollTo       = function(){};
-    w.Element.prototype.scrollBy       = function(){};
 
-    ['HTMLElement', 'Element'].forEach(function(name){
-        var proto = w[name] && w[name].prototype;
-        if(!proto) return;
-        var d = Object.getOwnPropertyDescriptor(proto, 'scrollTop');
-        if(d && d.set) Object.defineProperty(proto, 'scrollTop',
-            {get: d.get, set: function(){}, configurable: true});
-    });
+# =============================================================================
+# 2. LOGOUT
+# =============================================================================
+# The "Sign out" link in the navbar navigates the browser to ?logout=1.
+# On the next rerun, Streamlit sees that URL parameter here, wipes the
+# session, and reloads — sending the user back to the login screen.
 
-    function noAnchor(root){
-        root.querySelectorAll('*').forEach(function(el){
-            el.style.overflowAnchor = 'none';
-        });
-    }
-    noAnchor(w.document);
-    new w.MutationObserver(function(muts){
-        muts.forEach(function(m){
-            m.addedNodes.forEach(function(n){
-                if(n.nodeType===1){
-                    n.style.overflowAnchor='none';
-                    noAnchor(n);
-                }
-            });
-        });
-    }).observe(w.document.body, {childList:true, subtree:true});
+if st.query_params.get("logout"):
+    try:
+        get_supabase().auth.sign_out()
+    except Exception:
+        pass
+    st.session_state.clear()  # removes all saved chat history and auth info
+    st.query_params.clear()   # removes ?logout=1 from the URL
+    st.rerun()                # triggers a fresh page load
 
-    function setupTextarea(ta){
-        if(ta._autoResize) return;
-        ta._autoResize = true;
-        ta.style.overflowY = 'hidden';
-        ta.style.resize    = 'none';
-        function resize(){
-            ta.style.height = 'auto';
-            ta.style.height = ta.scrollHeight + 'px';
-        }
-        ta.addEventListener('input', resize);
-        resize();
-    }
-    function findTextareas(){
-        w.document.querySelectorAll('[data-testid="stChatInputTextArea"]')
-                  .forEach(setupTextarea);
-    }
-    findTextareas();
-    new w.MutationObserver(findTextareas)
-        .observe(w.document.body, {childList:true, subtree:true});
-})();
-</script>""", height=0)
 
-N8N_WEBHOOK_URL = "https://mlpvirtualsolutions.app.n8n.cloud/webhook/d7ce584c-b36b-4f7a-b920-1a0383ba483c"
+# =============================================================================
+# 3. LOGIN GATE
+# =============================================================================
+# If the user hasn't logged in yet, render the login form and stop here.
+# st.stop() prevents every line below from running until they authenticate.
 
+if not st.session_state.get("authenticated"):
+    render_login_page(get_supabase())
+    st.stop()
+
+
+# =============================================================================
+# AUTHENTICATED — everything below only runs for signed-in users
+# =============================================================================
+
+
+# =============================================================================
+# 4. SCROLL SCRIPTS
+# =============================================================================
+# Injects invisible JavaScript that prevents the page from auto-scrolling
+# and adds the scroll-to-bottom chevron button. See ui_components.py.
+
+inject_scroll_scripts()
+
+
+# =============================================================================
+# 5. STATE SETUP
+# =============================================================================
+# st.session_state is a dictionary that persists between reruns for a given
+# browser tab. We use it to remember the conversation and the logged-in user.
+
+# The n8n webhook URL is read from the .env file
+N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL")
+
+# Initialize the chat history list on the very first load
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+# Suggestion buttons write to pending_prompt; we read and remove it here
+# so it's used exactly once as the prompt for this rerun
 pending = st.session_state.pop("pending_prompt", None)
-show_header = len(st.session_state.messages) == 0 and pending is None
 
-# Navbar always rendered — position:fixed keeps it visible regardless of DOM position
-st.markdown("""
-<div class="app-navbar">
-  <div class="nav-brand">LOGI<span class="nav-brand-accent">DEX</span></div>
-  <div class="nav-links">
-    <span class="nav-link active">Chat</span>
-    <span class="nav-link">Dashboard</span>
-    <span class="nav-link">Handbook</span>
-    <span class="nav-link">Team</span>
-  </div>
-  <span class="nav-company">Meridian Freight</span>
-</div>
-""", unsafe_allow_html=True)
-
-header_placeholder = st.empty()
-
-if show_header:
-    with header_placeholder.container():
-        st.markdown("""
-<div class="hero-label">Meridian Ops Assistant</div>
-<h1 class="hero-heading">What do you need to <span class="hero-accent">know?</span></h1>
-<p class="hero-subtitle">Step-by-step answers pulled directly from your operations handbook.</p>
-""", unsafe_allow_html=True)
-
-        suggestions = [
-            "I just got a handoff from sales — what should I do?",
-            "How do I source and vet a carrier?",
-            "What do I do if a load is late or missing?",
-        ]
-        for i, sug in enumerate(suggestions):
-            if st.button(sug, key=f"sug_{i}", use_container_width=True):
-                st.session_state.pending_prompt = sug
-                st.rerun()
-
-        st.markdown("""
-<p class="app-footer">Powered by <span class="app-footer-accent">Logidex</span></p>
-""", unsafe_allow_html=True)
-
-ASSISTANT_LABEL = '<div class="assistant-label"><span class="assistant-dot">●</span> LOGIDEX</div>'
+# True only before the user has sent any messages in this session
+is_empty_chat = (len(st.session_state.messages) == 0 and pending is None)
 
 
-def render_user(text):
-    _, right = st.columns([0.22, 0.78])
-    with right:
-        st.markdown(f'<div class="user-bubble">{text}</div>', unsafe_allow_html=True)
+# =============================================================================
+# 6. NAVBAR  ← top of the screen
+# =============================================================================
+
+render_navbar(user_email=st.session_state.get("user_email", ""))
 
 
-def render_assistant(text):
-    st.markdown('<div class="msg-spacer"></div>', unsafe_allow_html=True)
-    st.markdown(ASSISTANT_LABEL, unsafe_allow_html=True)
-    st.markdown(text)
+# =============================================================================
+# 7. HERO / WELCOME SCREEN  ← shown before the first message
+# =============================================================================
+
+# st.empty() creates a named placeholder we can clear later when chat begins
+header_slot = st.empty()
+
+if is_empty_chat:
+    with header_slot.container():
+        render_hero_section()
 
 
-def fetch_and_stream(prompt):
-    st.markdown('<div class="msg-spacer"></div>', unsafe_allow_html=True)
-    st.markdown(ASSISTANT_LABEL, unsafe_allow_html=True)
-    placeholder = st.empty()
-    with st.spinner("Thinking..."):
-        try:
-            resp = requests.get(
-                N8N_WEBHOOK_URL,
-                params={"message": prompt},
-                auth=(st.secrets["auth"]["username"], st.secrets["auth"]["password"]),
-                timeout=30,
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            if isinstance(data, list) and data:
-                response = data[0].get("output") or data[0].get("message") or str(data[0])
-            elif isinstance(data, dict):
-                response = data.get("output") or data.get("message") or data.get("text") or str(data)
-            else:
-                response = str(data)
-        except Exception as e:
-            response = f"Error contacting n8n webhook: {e}"
+# =============================================================================
+# 8. CHAT HISTORY  ← all previous messages, top to bottom
+# =============================================================================
 
-    displayed = ""
-    for i in range(0, len(response), 10):
-        displayed += response[i:i + 10]
-        placeholder.markdown(displayed)
-        time.sleep(0.015)
-    placeholder.markdown(response)
-
-    return response
-
-
-for message in st.session_state.messages:
-    if message["role"] == "user":
-        render_user(message["content"])
+for i, msg in enumerate(st.session_state.messages):
+    if msg["role"] == "user":
+        # add_spacer=False on the very first message so there's no extra gap
+        render_user_message(msg["content"], add_spacer=(i > 0))
     else:
-        render_assistant(message["content"])
+        render_assistant_message(msg["content"])
 
-chat_in = st.chat_input("Ask anything about your operations...")
-prompt = pending or chat_in
+
+# =============================================================================
+# 9. CHAT INPUT  ← pinned to the bottom of the screen by Streamlit
+# =============================================================================
+
+user_input = st.chat_input("Ask anything about your operations...")
+
+# If a suggestion button was clicked, use that instead of the typed input
+prompt = pending or user_input
+
+
+# =============================================================================
+# 10. RESPONSE FLOW  ← runs only when there is a new prompt to process
+# =============================================================================
 
 if prompt:
-    if show_header:
-        header_placeholder.empty()
 
+    # Clear the hero section now that the conversation has started
+    if is_empty_chat:
+        header_slot.empty()
+
+    # Save and display the user's message
     st.session_state.messages.append({"role": "user", "content": prompt})
-    render_user(prompt)
+    render_user_message(prompt, add_spacer=(len(st.session_state.messages) > 1))
 
-    response = fetch_and_stream(prompt)
+    # Smooth-scroll the new bubble into view
+    scroll_to_last_bubble()
+
+    # Call the n8n webhook and stream the response back to the screen
+    response = fetch_and_stream(
+        prompt=prompt,
+        webhook_url=N8N_WEBHOOK_URL,
+        webhook_secret=st.secrets["webhook"]["secret"],
+    )
+
+    # Save the assistant's reply so it appears on future reruns
     st.session_state.messages.append({"role": "assistant", "content": response})

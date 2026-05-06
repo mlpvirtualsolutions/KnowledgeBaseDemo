@@ -25,7 +25,7 @@ footer                              { display: none !important; }
     max-width: 760px !important;
     padding-left: 1.5rem !important;
     padding-right: 1.5rem !important;
-    padding-top: 80px !important;
+    padding-top: 68px !important;
     padding-bottom: 2rem !important;
 }
 
@@ -209,7 +209,8 @@ div[data-testid="stVerticalBlock"] div[data-testid="stButton"] button:hover {
 }
 
 /* ── Message spacing ── */
-.msg-spacer { height: 16px; }
+.msg-spacer  { height: 16px; }
+.user-spacer { height: 32px; }
 
 /* ── User bubble ── */
 .user-bubble {
@@ -368,4 +369,61 @@ div[data-testid="stVerticalBlock"] div[data-testid="stButton"] button:hover {
     padding: 1px 5px !important;
     font-size: 0.82rem !important;
     color: #0f172a !important;
+}
+
+/* ── Login page ── */
+[data-testid="stForm"] {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 28px 24px 20px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
+
+[data-testid="stForm"] [data-testid="stTextInput"] input {
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 10px !important;
+    background: #f8fafc !important;
+    font-size: 0.88rem !important;
+    color: #1e293b !important;
+    padding: 10px 14px !important;
+}
+
+[data-testid="stForm"] [data-testid="stTextInput"] input:focus {
+    border-color: #3b82f6 !important;
+    background: #fff !important;
+    box-shadow: 0 0 0 3px rgba(59,130,246,0.12) !important;
+}
+
+[data-testid="stFormSubmitButton"] button {
+    background: #3b82f6 !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 10px !important;
+    font-weight: 600 !important;
+    font-size: 0.9rem !important;
+    height: 44px !important;
+    letter-spacing: 0.01em !important;
+}
+
+[data-testid="stFormSubmitButton"] button:hover {
+    background: #2563eb !important;
+}
+
+/* ── Navbar sign-out link ── */
+.nav-signout {
+    color: #64748b;
+    font-size: 0.78rem;
+    font-weight: 500;
+    text-decoration: none;
+    padding: 4px 11px;
+    border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.15);
+    transition: color 0.15s, border-color 0.15s;
+    white-space: nowrap;
+}
+.nav-signout:hover {
+    color: #fff;
+    border-color: rgba(255,255,255,0.35);
+    text-decoration: none;
 }
