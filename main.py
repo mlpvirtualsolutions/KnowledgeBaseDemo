@@ -114,8 +114,8 @@ inject_scroll_scripts()
 # st.session_state is a dictionary that persists between reruns for a given
 # browser tab. We use it to remember the conversation and the logged-in user.
 
-# The n8n webhook URL is read from the .env file
-N8N_WEBHOOK_URL = os.getenv("N8N_WEBHOOK_URL")
+# The n8n webhook URL is read from the secrets file
+N8N_WEBHOOK_URL = st.secrets["webhook"]["url"]
 
 # Initialize the chat history list on the very first load
 if "messages" not in st.session_state:
