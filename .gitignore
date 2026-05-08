@@ -1,3 +1,10 @@
+# Streamlit / Python
 .streamlit/secrets.toml
 .venv/
-.env
+__pycache__/
+
+# Next.js
+.next/
+out/
+node_modules/
+.env*.local
